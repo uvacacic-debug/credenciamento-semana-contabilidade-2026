@@ -1,0 +1,234 @@
+index.html
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Credenciamento | Semana da Contabilidade 2026</title>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f5f2ef;
+      color: #342b2b;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 25px auto;
+      padding: 25px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 18px #00000012;
+    }
+
+    h2 {
+      text-align: center;
+      color: #722f38;
+      margin-bottom: 5px;
+    }
+
+    .subtitulo {
+      text-align: center;
+      color: #777;
+      font-size: 14px;
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin-bottom: 9px;
+    }
+
+    select, button {
+      width: 100%;
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+
+    select {
+      border: 1px solid #ccc;
+      background: white;
+      margin-bottom: 15px;
+    }
+
+    button {
+      border: none;
+      background: #722f38;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #aaa;
+    }
+
+    #reader {
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    #resultado {
+      display: none;
+      padding: 16px;
+      border-radius: 9px;
+      margin-top: 18px;
+      text-align: center;
+      white-space: pre-line;
+      font-weight: bold;
+    }
+
+    .sucesso {
+      display: block !important;
+      background: #e4f4e8;
+      color: #206b35;
+    }
+
+    .erro {
+      display: block !important;
+      background: #fbe7e7;
+      color: #a32929;
+    }
+
+    .orientacao {
+      text-align: center;
+      color: #777;
+      font-size: 13px;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <main class="container">
+    <h2>Semana da Contabilidade 2026</h2>
+    <p class="subtitulo">Sistema de credenciamento e registro de presença</p>
+
+    <label for="programacao">Selecione a programação:</label>
+
+    <select id="programacao">
+      <option value="">Escolha a programação</option>
+      <option value="P1">P1 — 24/11/2026 — Noite</option>
+      <option value="P2">P2 — 25/11/2026 — Manhã</option>
+      <option value="P3">P3 — 25/11/2026 — Noite</option>
+      <option value="P4">P4 — 26/11/2026 — Manhã</option>
+      <option value="P5">P5 — 26/11/2026 — Noite</option>
+      <option value="P6">P6 — 27/11/2026 — Noite</option>
+    </select>
+
+    <button id="iniciar" onclick="iniciarLeitura()">
+      Iniciar leitura dos QR Codes
+    </button>
+
+    <div id="reader"></div>
+    <div id="resultado"></div>
+
+    <p class="orientacao">
+      Selecione a programação e aponte a câmera para o QR Code do participante.
+    </p>
+  </main>
+
+  <!-- Comunicação com o Google Apps Script -->
+  <iframe name="respostaServidor" id="respostaServidor"
+          style="display:none"></iframe>
+
+  <form id="formulario" method="POST"
+        target="respostaServidor"
+        action="URL_DO_APPS_SCRIPT">
+    <input type="hidden" name="token" id="token">
+    <input type="hidden" name="programacao" id="programacaoEnvio">
+  </form>
+
+  <script>
+    let leitor = null;
+    let processando = false;
+    let iniciado = false;
+
+    function mostrarResultado(mensagem, sucesso) {
+      const caixa = document.getElementById("resultado");
+      caixa.textContent = mensagem;
+      caixa.className = sucesso ? "sucesso" : "erro";
+    }
+
+    function iniciarLeitura() {
+      const programacao = document.getElementById("programacao").value;
+
+      if (!programacao) {
+        mostrarResultado("Selecione uma programação.", false);
+        return;
+      }
+
+      if (iniciado) return;
+
+      if (typeof Html5Qrcode === "undefined") {
+        mostrarResultado("Não foi possível carregar o leitor. Verifique a internet.", false);
+        return;
+      }
+
+      leitor = new Html5Qrcode("reader");
+      iniciado = true;
+
+      document.getElementById("iniciar").disabled = true;
+
+      leitor.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 230, height: 230 } },
+        codigoLido,
+        function() {}
+      ).catch(function(erro) {
+        iniciado = false;
+        document.getElementById("iniciar").disabled = false;
+        mostrarResultado("Erro ao acessar a câmera: " + String(erro), false);
+      });
+    }
+
+    function codigoLido(token) {
+      if (processando) return;
+
+      processando = true;
+      leitor.pause(true);
+
+      document.getElementById("token").value = token.trim();
+      document.getElementById("programacaoEnvio").value =
+        document.getElementById("programacao").value;
+
+      mostrarResultado("Validando participante...", true);
+
+      document.getElementById("formulario").submit();
+    }
+
+    window.addEventListener("message", function(event) {
+      if (event.source !== document.getElementById("respostaServidor").contentWindow) {
+        return;
+      }
+
+      const resposta = event.data;
+
+      if (!resposta || resposta.tipo !== "credenciamento") return;
+
+      mostrarResultado(resposta.mensagem, resposta.sucesso);
+
+      setTimeout(function() {
+        processando = false;
+
+        if (leitor && iniciado) {
+          leitor.resume();
+        }
+      }, 2000);
+    });
+  </script>
+
+</body>
+</html>
