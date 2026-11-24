@@ -151,83 +151,123 @@ index.html
     <input type="hidden" name="programacao" id="programacaoEnvio">
   </form>
 
-  <script>
-    let leitor = null;
-    let processando = false;
-    let iniciado = false;
+ 
+<script>
+  let leitor = null;
+  let processando = false;
+  let iniciado = false;
 
-    function mostrarResultado(mensagem, sucesso) {
-      const caixa = document.getElementById("resultado");
-      caixa.textContent = mensagem;
-      caixa.className = sucesso ? "sucesso" : "erro";
-    }
+  const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyhEUT_qJ_K4c8BonQeW1a9BAM6Y8LB8dFbxNDNlyOsGoGR0Ox7gMyFgR1lQjhjKtxRYA/exec";
 
-    function iniciarLeitura() {
-      const programacao = document.getElementById("programacao").value;
+  let scriptResposta = null;
+  let temporizadorResposta = null;
 
-      if (!programacao) {
-        mostrarResultado("Selecione uma programação.", false);
-        return;
-      }
-
-      if (iniciado) return;
-
-      if (typeof Html5Qrcode === "undefined") {
-        mostrarResultado("Não foi possível carregar o leitor. Verifique a internet.", false);
-        return;
-      }
-
-      leitor = new Html5Qrcode("reader");
-      iniciado = true;
-
-      document.getElementById("iniciar").disabled = true;
-
-      leitor.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 230, height: 230 } },
-        codigoLido,
-        function() {}
-      ).catch(function(erro) {
-        iniciado = false;
-        document.getElementById("iniciar").disabled = false;
-        mostrarResultado("Erro ao acessar a câmera: " + String(erro), false);
-      });
-    }
-
-    function codigoLido(token) {
-      if (processando) return;
-
-      processando = true;
-      leitor.pause(true);
-
-      document.getElementById("token").value = token.trim();
-      document.getElementById("programacaoEnvio").value =
-        document.getElementById("programacao").value;
-
-      mostrarResultado("Validando participante...", true);
-
-      document.getElementById("formulario").submit();
-    }
-
-    
-window.addEventListener("message", function(event) {
-  const resposta = event.data;
-
-  if (!resposta || resposta.tipo !== "credenciamento") {
-    return;
+  function mostrarResultado(mensagem, sucesso) {
+    const caixa = document.getElementById("resultado");
+    caixa.textContent = mensagem;
+    caixa.className = sucesso ? "sucesso" : "erro";
   }
 
-  mostrarResultado(resposta.mensagem, resposta.sucesso);
+  function iniciarLeitura() {
+    const programacao = document.getElementById("programacao").value;
 
-  setTimeout(function() {
-    processando = false;
-
-    if (leitor && iniciado) {
-      leitor.resume();
+    if (!programacao) {
+      mostrarResultado("Selecione uma programação antes de continuar.", false);
+      return;
     }
-  }, 2000);
-});
-  </script>
 
-</body>
-</html>
+    if (iniciado) return;
+
+    if (typeof Html5Qrcode === "undefined") {
+      mostrarResultado("Não foi possível carregar o leitor de QR Code. Verifique sua conexão.", false);
+      return;
+    }
+
+    leitor = new Html5Qrcode("reader");
+    iniciado = true;
+
+    document.getElementById("iniciar").disabled = true;
+
+    leitor.start(
+      { facingMode: "environment" },
+      {
+        fps: 10,
+        qrbox: { width: 230, height: 230 }
+      },
+      codigoLido,
+      function() {}
+    ).catch(function(erro) {
+      iniciado = false;
+      document.getElementById("iniciar").disabled = false;
+      mostrarResultado("Erro ao iniciar a câmera: " + String(erro), false);
+    });
+  }
+
+  function finalizarLeitura(resposta) {
+    clearTimeout(temporizadorResposta);
+
+    if (scriptResposta) {
+      scriptResposta.remove();
+      scriptResposta = null;
+    }
+
+    mostrarResultado(resposta.mensagem, resposta.sucesso);
+
+    if (resposta.sucesso) {
+      document.getElementById("resultado").textContent =
+        "PRESENÇA CONFIRMADA\n" +
+        (resposta.nome || "") + "\n" +
+        "Programação: " + (resposta.programacao || "") + "\n" +
+        "Horário: " + (resposta.horario || "");
+    }
+
+    setTimeout(function() {
+      processando = false;
+
+      if (leitor && iniciado) {
+        leitor.resume();
+      }
+    }, 1800);
+  }
+
+  function receberRespostaCredenciamento(resposta) {
+    if (!processando) return;
+    finalizarLeitura(resposta);
+  }
+
+  function codigoLido(texto) {
+    if (processando) return;
+
+    processando = true;
+    leitor.pause(true);
+
+    mostrarResultado("Validando participante...", true);
+
+    const programacao = document.getElementById("programacao").value;
+
+    const url = new URL(URL_APPS_SCRIPT);
+    url.searchParams.set("callback", "receberRespostaCredenciamento");
+    url.searchParams.set("token", texto.trim());
+    url.searchParams.set("programacao", programacao);
+
+    scriptResposta = document.createElement("script");
+    scriptResposta.src = url.toString();
+    scriptResposta.async = true;
+
+    scriptResposta.onerror = function() {
+      finalizarLeitura({
+        sucesso: false,
+        mensagem: "Falha na comunicação com o servidor. Tente novamente."
+      });
+    };
+
+    temporizadorResposta = setTimeout(function() {
+      finalizarLeitura({
+        sucesso: false,
+        mensagem: "Tempo de resposta esgotado. Verifique a conexão e tente novamente."
+      });
+    }, 15000);
+
+    document.body.appendChild(scriptResposta);
+  }
+</script>
