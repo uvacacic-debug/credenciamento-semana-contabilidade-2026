@@ -209,25 +209,24 @@ index.html
       document.getElementById("formulario").submit();
     }
 
-    window.addEventListener("message", function(event) {
-      if (event.source !== document.getElementById("respostaServidor").contentWindow) {
-        return;
-      }
+    
+window.addEventListener("message", function(event) {
+  const resposta = event.data;
 
-      const resposta = event.data;
+  if (!resposta || resposta.tipo !== "credenciamento") {
+    return;
+  }
 
-      if (!resposta || resposta.tipo !== "credenciamento") return;
+  mostrarResultado(resposta.mensagem, resposta.sucesso);
 
-      mostrarResultado(resposta.mensagem, resposta.sucesso);
+  setTimeout(function() {
+    processando = false;
 
-      setTimeout(function() {
-        processando = false;
-
-        if (leitor && iniciado) {
-          leitor.resume();
-        }
-      }, 2000);
-    });
+    if (leitor && iniciado) {
+      leitor.resume();
+    }
+  }, 2000);
+});
   </script>
 
 </body>
